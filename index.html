@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Game Over para el Calentamiento</title>
+  <title>Zambrano Cool Run</title>
   <style>
     body { margin: 0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; font-family: Arial, sans-serif; }
     canvas { background: linear-gradient(#ffd400, #ffb700); border:4px solid #000; }
@@ -18,7 +18,7 @@
   <canvas id="game" width="360" height="600"></canvas>
   <div id="overlay">
     🚗🔥<br/>
-    <h2>Game Over para el Calentamiento</h2>
+    <h2>Zambrano Cool Run</h2>
     <p>Toca la pantalla para moverte<br/>Recoge refrigerante ❄️</p>
     <button onclick="startGame()">Jugar</button>
   </div>
@@ -104,7 +104,7 @@ function loop(){
   // miss
   if(coolant.y > 640){
     running = false;
-    overlay.innerHTML = `🔥 GAME OVER 🔥<br/>Puntos: ${score}<br/><br/>Radiadores Zambrano<br/><button onclick="startGame()">Reintentar</button>`;
+    overlay.innerHTML = `🔥 FIN DEL JUEGO 🔥<br/>Puntos: ${score}<br/><br/>Radiadores Zambrano · Zambrano Cool Run<br/><button onclick="startGame()">Reintentar</button>`;
     overlay.style.display='block';
     return;
   }
