@@ -6,260 +6,299 @@
   <title>Zambrano Cool Run</title>
   <style>
     body { margin: 0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; font-family: Arial, sans-serif; }
-    canvas { background: linear-gradient(#ffd400, #ffb700); border:4px solid #000; }
+    canvas { background:#ffd400; border:4px solid #000; }
     #overlay {
       position:absolute; text-align:center; color:#000; font-weight:bold;
-      background:rgba(255,255,255,0.85); padding:20px; border-radius:12px;
+      background:rgba(255,255,255,0.88); padding:18px 16px; border-radius:12px;
+      max-width: 320px;
     }
-    button { padding:10px 18px; font-size:16px; cursor:pointer; }
+    button { padding:10px 18px; font-size:16px; cursor:pointer; border:2px solid #000; border-radius:10px; }
   </style>
 </head>
 <body>
   <canvas id="game" width="360" height="600"></canvas>
   <div id="overlay">
-    🚗🔥<br/>
-    <h2>Zambrano Cool Run</h2>
-    <p>Toca la pantalla para moverte<br/>Recoge refrigerante ❄️</p>
-    <button onclick="startGame()">Jugar</button>
+    🚗❄️<br/>
+    <h2 style="margin:8px 0;">Zambrano Cool Run</h2>
+    <p style="margin:8px 0 14px;">Toca o arrastra para mover el carro.<br/>Recoge la botella de refrigerante.</p>
+    <button id="btnStart">Jugar</button>
+    <div style="margin-top:10px;font-size:12px;opacity:.8;">Radiadores Zambrano</div>
   </div>
 
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const btnStart = document.getElementById('btnStart');
 
-let car, coolant, score, running;
-let roadOffset = 0;
+  let car, coolant, score, running;
+  let roadOffset = 0;
 
-// --- Tiny pixel-art sprites (drawn in-code, no assets needed) ---
-// Each sprite is an array of strings. Characters map to colors.
-const SPRITES = {
-  car: [
-    "....KKK....",
-    "...KRRRK...",
-    "..KRRRRRK..",
-    ".KRRRRRRK.",
-    "KRRRBBRRRK",
-    "KRRBBBBRRK",
-    "KRRRBBRRRK",
-    ".KRRRRRRK.",
-    "..KRRRRRK..",
-    "...KRRRK...",
-    "....KKK....",
-  ],
-  bottle: [
-    "....GG....",
-    "...GWWG...",
-    "...GWWG...",
-    "..GWWWWG..",
-    "..GWWWWG..",
-    "..GWWWWG..",
-    "..GWWWWG..",
-    "..GWWWWG..",
-    "...GWWG...",
-    "...GWWG...",
-    "....GG....",
-  ]
-};
+  // --- Tiny pixel-art sprites (drawn in-code, no assets needed) ---
+  const SPRITES = {
+    car: [
+      "....KKK....",
+      "...KRRRK...",
+      "..KRRRRRK..",
+      ".KRRRRRRK.",
+      "KRRRBBRRRK",
+      "KRRBBBBRRK",
+      "KRRRBBRRRK",
+      ".KRRRRRRK.",
+      "..KRRRRRK..",
+      "...KRRRK...",
+      "....KKK....",
+    ],
+    bottle: [
+      "....GG....",
+      "...GWWG...",
+      "...GWWG...",
+      "..GWWWWG..",
+      "..GWWWWG..",
+      "..GWWWWG..",
+      "..GWWWWG..",
+      "..GWWWWG..",
+      "...GWWG...",
+      "...GWWG...",
+      "....GG....",
+    ]
+  };
 
-const PALETTE = {
-  '.': null,
-  K: '#111111', // outline
-  R: '#ff2b2b', // red car
-  B: '#2b6bff', // blue detail
-  G: '#00b3ff', // coolant bottle
-  W: '#e6f7ff'  // label highlight
-};
+  const PALETTE = {
+    '.': null,
+    K: '#111111', // outline
+    R: '#ff2b2b', // red car
+    B: '#2b6bff', // blue detail
+    G: '#00b3ff', // coolant bottle
+    W: '#e6f7ff'  // label highlight
+  };
 
-function drawSprite(sprite, x, y, scale){
-  for(let row=0; row<sprite.length; row++){
-    const line = sprite[row];
-    for(let col=0; col<line.length; col++){
-      const ch = line[col];
-      const color = PALETTE[ch];
-      if(!color) continue;
-      ctx.fillStyle = color;
-      ctx.fillRect(x + col*scale, y + row*scale, scale, scale);
+  function spriteSize(sprite, scale){
+    return { w: sprite[0].length*scale, h: sprite.length*scale };
+  }
+
+  function drawSprite(sprite, x, y, scale){
+    for(let row=0; row<sprite.length; row++){
+      const line = sprite[row];
+      for(let col=0; col<line.length; col++){
+        const ch = line[col];
+        const color = PALETTE[ch];
+        if(!color) continue;
+        ctx.fillStyle = color;
+        ctx.fillRect(x + col*scale, y + row*scale, scale, scale);
+      }
     }
   }
-}
 
-function spriteSize(sprite, scale){
-  return { w: sprite[0].length*scale, h: sprite.length*scale };
-}
+  function resetGame(){
+    const carScale = 4;
+    const bottleScale = 3;
 
-function resetGame(){
-  const carScale = 4;
-  const bottleScale = 3;
+    const carSz = spriteSize(SPRITES.car, carScale);
+    const botSz = spriteSize(SPRITES.bottle, bottleScale);
 
-  const carSz = spriteSize(SPRITES.car, carScale);
-  const botSz = spriteSize(SPRITES.bottle, bottleScale);
+    car = {
+      x: (canvas.width - carSz.w)/2,
+      y: canvas.height - (carSz.h + 24),
+      w: carSz.w,
+      h: carSz.h,
+      scale: carScale
+    };
 
-  car = { x: (canvas.width-carSz.w)/2, y: canvas.height- (carSz.h + 24), w: carSz.w, h: carSz.h, scale: carScale };
-  coolant = { x: Math.random()*(canvas.width- botSz.w) + 0, y: -botSz.h, w: botSz.w, h: botSz.h, scale: bottleScale };
+    coolant = {
+      x: Math.random() * (canvas.width - botSz.w),
+      y: -botSz.h,
+      w: botSz.w,
+      h: botSz.h,
+      scale: bottleScale
+    };
 
-  score = 0;
-  roadOffset = 0;
-  running = true;
-};
-  coolant = { x: Math.random()*320+20, y: -40, r: 15 };
-  score = 0;
-  running = true;
-}
-
-function startGame(){
-  overlay.style.display='none';
-  resetGame();
-  requestAnimationFrame(loop);
-}
-
-// Input (mobile + desktop): arrastra o toca para mover
-canvas.style.touchAction = 'none';
-
-function setCarX(clientX){
-  const rect = canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  car.x = x - car.w/2;
-  // clamp
-  if(car.x < 0) car.x = 0;
-  if(car.x + car.w > canvas.width) car.x = canvas.width - car.w;
-}
-
-canvas.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  setCarX(e.clientX);
-});
-canvas.addEventListener('pointermove', (e) => {
-  if(e.buttons === 0 && e.pointerType === 'mouse') return; // no drag on desktop unless pressed
-  e.preventDefault();
-  setCarX(e.clientX);
-});
-
-// Fallback for some older mobile browsers
-canvas.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  setCarX(e.touches[0].clientX);
-}, { passive:false });
-canvas.addEventListener('touchmove', (e) => {
-  e.preventDefault();
-  setCarX(e.touches[0].clientX);
-}, { passive:false });
-
-function loop(){
-  if(!running) return;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawRoad();
-
-  // --- Background: scrolling road ---
-function drawRoad(){
-  // Sky
-  ctx.fillStyle = '#ffd400';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // Road trapezoid
-  const topY = 80;
-  const bottomY = canvas.height;
-  const topW = 140;
-  const bottomW = 320;
-  const centerX = canvas.width/2;
-
-  ctx.fillStyle = '#2a2a2a';
-  ctx.beginPath();
-  ctx.moveTo(centerX - topW/2, topY);
-  ctx.lineTo(centerX + topW/2, topY);
-  ctx.lineTo(centerX + bottomW/2, bottomY);
-  ctx.lineTo(centerX - bottomW/2, bottomY);
-  ctx.closePath();
-  ctx.fill();
-
-  // Shoulders
-  ctx.fillStyle = '#1f8f3a';
-  ctx.beginPath();
-  ctx.moveTo(0, topY);
-  ctx.lineTo(centerX - topW/2, topY);
-  ctx.lineTo(centerX - bottomW/2, bottomY);
-  ctx.lineTo(0, bottomY);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(centerX + topW/2, topY);
-  ctx.lineTo(canvas.width, topY);
-  ctx.lineTo(canvas.width, bottomY);
-  ctx.lineTo(centerX + bottomW/2, bottomY);
-  ctx.closePath();
-  ctx.fill();
-
-  // Lane markers (center dashed)
-  ctx.fillStyle = '#ffffff';
-  const dashH = 28;
-  const gap = 18;
-  roadOffset = (roadOffset + 6) % (dashH + gap);
-
-  // Draw dashes with perspective scaling
-  for(let y = topY; y < bottomY; y += (dashH + gap)){
-    const yy = y + roadOffset;
-    const t = (yy - topY) / (bottomY - topY);
-    const dashW = 6 + t*10;
-    const x = centerX - dashW/2;
-    const h = dashH * (0.5 + t);
-    ctx.fillRect(x, yy, dashW, h);
+    score = 0;
+    roadOffset = 0;
+    running = true;
   }
 
-  // Edge stripes
-  function edgeXLeft(y){
-    const t = (y - topY)/(bottomY-topY);
-    return centerX - (topW/2 + t*(bottomW-topW)/2);
-  }
-  function edgeXRight(y){
-    const t = (y - topY)/(bottomY-topY);
-    return centerX + (topW/2 + t*(bottomW-topW)/2);
-  }
-  ctx.fillStyle = '#ff2b2b';
-  for(let y=topY; y<bottomY; y+=40){
-    const yy = y + (roadOffset*0.7);
-    const lx = edgeXLeft(yy)-8;
-    const rx = edgeXRight(yy);
-    ctx.fillRect(lx, yy, 8, 20);
-    ctx.fillRect(rx, yy, 8, 20);
-  }
-}
-
-// --- draw car sprite ---
-drawSprite(SPRITES.car, car.x, car.y, car.scale);
-
-  // draw coolant bottle sprite
- drawSprite(SPRITES.bottle, coolant.x, coolant.y, coolant.scale);
-
-  coolant.y += 6;
-
-  // collision (AABB)
-if(
-  coolant.x < car.x + car.w &&
-  coolant.x + coolant.w > car.x &&
-  coolant.y < car.y + car.h &&
-  coolant.y + coolant.h > car.y
-){
-  score++;
-  coolant.y = -coolant.h;
-  coolant.x = Math.random()*(canvas.width- coolant.w);
-}
-
-  // miss
-if(coolant.y > canvas.height + 40){
-    running = false;
-    overlay.innerHTML = `🔥 FIN DEL JUEGO 🔥<br/>Puntos: ${score}<br/><br/>Radiadores Zambrano · Zambrano Cool Run<br/><button onclick="startGame()">Reintentar</button>`;
-    overlay.style.display='block';
-    return;
+  function startGame(){
+    overlay.style.display='none';
+    resetGame();
+    requestAnimationFrame(loop);
   }
 
-  ctx.fillStyle = '#111';
-ctx.font = '16px Arial';
-ctx.fillText('Refrigerante: ' + score, 10, 22);
-ctx.fillText('Zambrano Cool Run', 10, 42);
+  // Input (mobile + desktop)
+  canvas.style.touchAction = 'none';
 
-  requestAnimationFrame(loop);
-}
+  function setCarX(clientX){
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    car.x = x - car.w/2;
+    if(car.x < 0) car.x = 0;
+    if(car.x + car.w > canvas.width) car.x = canvas.width - car.w;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if(!running) return;
+    e.preventDefault();
+    setCarX(e.clientX);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if(!running) return;
+    if(e.pointerType === 'mouse' && e.buttons === 0) return;
+    e.preventDefault();
+    setCarX(e.clientX);
+  });
+
+  // Fallback touch for some browsers
+  canvas.addEventListener('touchstart', (e) => {
+    if(!running) return;
+    e.preventDefault();
+    setCarX(e.touches[0].clientX);
+  }, { passive:false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if(!running) return;
+    e.preventDefault();
+    setCarX(e.touches[0].clientX);
+  }, { passive:false });
+
+  btnStart.addEventListener('click', startGame);
+
+  function drawRoad(){
+    // Retro sky
+    ctx.fillStyle = '#2b6bff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // Distant horizon band
+    ctx.fillStyle = '#1f8f3a';
+    ctx.fillRect(0, 92, canvas.width, 18);
+
+    // Road trapezoid
+    const topY = 110;
+    const bottomY = canvas.height;
+    const topW = 130;
+    const bottomW = 320;
+    const centerX = canvas.width/2;
+
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    ctx.moveTo(centerX - topW/2, topY);
+    ctx.lineTo(centerX + topW/2, topY);
+    ctx.lineTo(centerX + bottomW/2, bottomY);
+    ctx.lineTo(centerX - bottomW/2, bottomY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Grass shoulders
+    ctx.fillStyle = '#1f8f3a';
+    ctx.beginPath();
+    ctx.moveTo(0, topY);
+    ctx.lineTo(centerX - topW/2, topY);
+    ctx.lineTo(centerX - bottomW/2, bottomY);
+    ctx.lineTo(0, bottomY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(centerX + topW/2, topY);
+    ctx.lineTo(canvas.width, topY);
+    ctx.lineTo(canvas.width, bottomY);
+    ctx.lineTo(centerX + bottomW/2, bottomY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Perspective helper
+    const dashH = 26;
+    const gap = 16;
+    roadOffset = (roadOffset + 7) % (dashH + gap);
+
+    // Center dashed line
+    ctx.fillStyle = '#ffffff';
+    for(let y = topY; y < bottomY; y += (dashH + gap)){
+      const yy = y + roadOffset;
+      const t = (yy - topY) / (bottomY - topY);
+      const dashW = 5 + t*10;
+      const x = centerX - dashW/2;
+      const h = dashH * (0.55 + t);
+      ctx.fillRect(x, yy, dashW, h);
+    }
+
+    // Edge stripes
+    function edgeXLeft(y){
+      const t = (y - topY)/(bottomY-topY);
+      return centerX - (topW/2 + t*(bottomW-topW)/2);
+    }
+    function edgeXRight(y){
+      const t = (y - topY)/(bottomY-topY);
+      return centerX + (topW/2 + t*(bottomW-topW)/2);
+    }
+
+    for(let y=topY; y<bottomY; y+=40){
+      const yy = y + (roadOffset*0.6);
+      const t = (yy - topY) / (bottomY - topY);
+      const stripeW = 6 + t*10;
+      const stripeH = 14 + t*16;
+      ctx.fillStyle = '#ff2b2b';
+      ctx.fillRect(edgeXLeft(yy) - stripeW, yy, stripeW, stripeH);
+      ctx.fillRect(edgeXRight(yy), yy, stripeW, stripeH);
+    }
+
+    // Simple clouds
+    ctx.fillStyle = '#e6f7ff';
+    ctx.fillRect(40, 28, 26, 10);
+    ctx.fillRect(56, 22, 22, 10);
+    ctx.fillRect(64, 32, 18, 8);
+
+    ctx.fillRect(240, 40, 30, 10);
+    ctx.fillRect(258, 34, 18, 10);
+    ctx.fillRect(270, 44, 16, 8);
+  }
+
+  function loop(){
+    if(!running) return;
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawRoad();
+
+    // Move bottle
+    coolant.y += 6;
+
+    // Collision (AABB)
+    if(
+      coolant.x < car.x + car.w &&
+      coolant.x + coolant.w > car.x &&
+      coolant.y < car.y + car.h &&
+      coolant.y + coolant.h > car.y
+    ){
+      score++;
+      coolant.y = -coolant.h;
+      coolant.x = Math.random() * (canvas.width - coolant.w);
+    }
+
+    // Miss -> game over
+    if(coolant.y > canvas.height + 40){
+      running = false;
+      overlay.innerHTML = `🔥 FIN DEL JUEGO 🔥<br/>Refrigerante: ${score}<br/><br/>Radiadores Zambrano<br/><br/><button id="btnRetry">Reintentar</button>`;
+      overlay.style.display = 'block';
+      document.getElementById('btnRetry').addEventListener('click', () => {
+        // restore original overlay content quickly
+        overlay.innerHTML = `🚗❄️<br/><h2 style="margin:8px 0;">Zambrano Cool Run</h2><p style="margin:8px 0 14px;">Toca o arrastra para mover el carro.<br/>Recoge la botella de refrigerante.</p><button id="btnStart">Jugar</button><div style="margin-top:10px;font-size:12px;opacity:.8;">Radiadores Zambrano</div>`;
+        document.getElementById('btnStart').addEventListener('click', startGame);
+      });
+      return;
+    }
+
+    // Draw sprites
+    drawSprite(SPRITES.bottle, coolant.x, coolant.y, coolant.scale);
+    drawSprite(SPRITES.car, car.x, car.y, car.scale);
+
+    // HUD
+    ctx.fillStyle = '#111';
+    ctx.font = '16px Arial';
+    ctx.fillText('Refrigerante: ' + score, 10, 22);
+  }
+
+})();
 </script>
 </body>
 </html>
