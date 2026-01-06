@@ -281,7 +281,6 @@
       overlay.innerHTML = `🔥 FIN DEL JUEGO 🔥<br/>Refrigerante: ${score}<br/><br/>Radiadores Zambrano<br/><br/><button id="btnRetry">Reintentar</button>`;
       overlay.style.display = 'block';
       document.getElementById('btnRetry').addEventListener('click', () => {
-        // restore original overlay content quickly
         overlay.innerHTML = `🚗❄️<br/><h2 style="margin:8px 0;">Zambrano Cool Run</h2><p style="margin:8px 0 14px;">Toca o arrastra para mover el carro.<br/>Recoge la botella de refrigerante.</p><button id="btnStart">Jugar</button><div style="margin-top:10px;font-size:12px;opacity:.8;">Radiadores Zambrano</div>`;
         document.getElementById('btnStart').addEventListener('click', startGame);
       });
@@ -296,6 +295,9 @@
     ctx.fillStyle = '#111';
     ctx.font = '16px Arial';
     ctx.fillText('Refrigerante: ' + score, 10, 22);
+
+    // next frame
+    requestAnimationFrame(loop);
   }
 
 })();
