@@ -43,10 +43,37 @@ function startGame(){
   requestAnimationFrame(loop);
 }
 
-canvas.addEventListener('touchstart', e => {
-  const touchX = e.touches[0].clientX - canvas.getBoundingClientRect().left;
-  car.x = touchX - car.w/2;
+// Input (mobile + desktop): arrastra o toca para mover
+canvas.style.touchAction = 'none';
+
+function setCarX(clientX){
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  car.x = x - car.w/2;
+  // clamp
+  if(car.x < 0) car.x = 0;
+  if(car.x + car.w > canvas.width) car.x = canvas.width - car.w;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  setCarX(e.clientX);
 });
+canvas.addEventListener('pointermove', (e) => {
+  if(e.buttons === 0 && e.pointerType === 'mouse') return; // no drag on desktop unless pressed
+  e.preventDefault();
+  setCarX(e.clientX);
+});
+
+// Fallback for some older mobile browsers
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  setCarX(e.touches[0].clientX);
+}, { passive:false });
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  setCarX(e.touches[0].clientX);
+}, { passive:false });
 
 function loop(){
   if(!running) return;
