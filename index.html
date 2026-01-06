@@ -29,9 +29,79 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 
 let car, coolant, score, running;
+let roadOffset = 0;
+
+// --- Tiny pixel-art sprites (drawn in-code, no assets needed) ---
+// Each sprite is an array of strings. Characters map to colors.
+const SPRITES = {
+  car: [
+    "....KKK....",
+    "...KRRRK...",
+    "..KRRRRRK..",
+    ".KRRRRRRK.",
+    "KRRRBBRRRK",
+    "KRRBBBBRRK",
+    "KRRRBBRRRK",
+    ".KRRRRRRK.",
+    "..KRRRRRK..",
+    "...KRRRK...",
+    "....KKK....",
+  ],
+  bottle: [
+    "....GG....",
+    "...GWWG...",
+    "...GWWG...",
+    "..GWWWWG..",
+    "..GWWWWG..",
+    "..GWWWWG..",
+    "..GWWWWG..",
+    "..GWWWWG..",
+    "...GWWG...",
+    "...GWWG...",
+    "....GG....",
+  ]
+};
+
+const PALETTE = {
+  '.': null,
+  K: '#111111', // outline
+  R: '#ff2b2b', // red car
+  B: '#2b6bff', // blue detail
+  G: '#00b3ff', // coolant bottle
+  W: '#e6f7ff'  // label highlight
+};
+
+function drawSprite(sprite, x, y, scale){
+  for(let row=0; row<sprite.length; row++){
+    const line = sprite[row];
+    for(let col=0; col<line.length; col++){
+      const ch = line[col];
+      const color = PALETTE[ch];
+      if(!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(x + col*scale, y + row*scale, scale, scale);
+    }
+  }
+}
+
+function spriteSize(sprite, scale){
+  return { w: sprite[0].length*scale, h: sprite.length*scale };
+}
 
 function resetGame(){
-  car = { x: 180, y: 500, w: 40, h: 60 };
+  const carScale = 4;
+  const bottleScale = 3;
+
+  const carSz = spriteSize(SPRITES.car, carScale);
+  const botSz = spriteSize(SPRITES.bottle, bottleScale);
+
+  car = { x: (canvas.width-carSz.w)/2, y: canvas.height- (carSz.h + 24), w: carSz.w, h: carSz.h, scale: carScale };
+  coolant = { x: Math.random()*(canvas.width- botSz.w) + 0, y: -botSz.h, w: botSz.w, h: botSz.h, scale: bottleScale };
+
+  score = 0;
+  roadOffset = 0;
+  running = true;
+};
   coolant = { x: Math.random()*320+20, y: -40, r: 15 };
   score = 0;
   running = true;
@@ -77,40 +147,116 @@ canvas.addEventListener('touchmove', (e) => {
 
 function loop(){
   if(!running) return;
-  ctx.clearRect(0,0,360,600);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawRoad();
 
-  // draw car
-  ctx.fillStyle='#0066cc';
-  ctx.fillRect(car.x, car.y, car.w, car.h);
+  // --- Background: scrolling road ---
+function drawRoad(){
+  // Sky
+  ctx.fillStyle = '#ffd400';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // draw coolant
-  ctx.fillStyle='#00cfff';
+  // Road trapezoid
+  const topY = 80;
+  const bottomY = canvas.height;
+  const topW = 140;
+  const bottomW = 320;
+  const centerX = canvas.width/2;
+
+  ctx.fillStyle = '#2a2a2a';
   ctx.beginPath();
-  ctx.arc(coolant.x, coolant.y, coolant.r, 0, Math.PI*2);
+  ctx.moveTo(centerX - topW/2, topY);
+  ctx.lineTo(centerX + topW/2, topY);
+  ctx.lineTo(centerX + bottomW/2, bottomY);
+  ctx.lineTo(centerX - bottomW/2, bottomY);
+  ctx.closePath();
   ctx.fill();
 
-  coolant.y += 4;
+  // Shoulders
+  ctx.fillStyle = '#1f8f3a';
+  ctx.beginPath();
+  ctx.moveTo(0, topY);
+  ctx.lineTo(centerX - topW/2, topY);
+  ctx.lineTo(centerX - bottomW/2, bottomY);
+  ctx.lineTo(0, bottomY);
+  ctx.closePath();
+  ctx.fill();
 
-  // collision
-  if(
-    coolant.x > car.x && coolant.x < car.x + car.w &&
-    coolant.y > car.y && coolant.y < car.y + car.h
-  ){
-    score++;
-    coolant.y = -40;
-    coolant.x = Math.random()*320+20;
+  ctx.beginPath();
+  ctx.moveTo(centerX + topW/2, topY);
+  ctx.lineTo(canvas.width, topY);
+  ctx.lineTo(canvas.width, bottomY);
+  ctx.lineTo(centerX + bottomW/2, bottomY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Lane markers (center dashed)
+  ctx.fillStyle = '#ffffff';
+  const dashH = 28;
+  const gap = 18;
+  roadOffset = (roadOffset + 6) % (dashH + gap);
+
+  // Draw dashes with perspective scaling
+  for(let y = topY; y < bottomY; y += (dashH + gap)){
+    const yy = y + roadOffset;
+    const t = (yy - topY) / (bottomY - topY);
+    const dashW = 6 + t*10;
+    const x = centerX - dashW/2;
+    const h = dashH * (0.5 + t);
+    ctx.fillRect(x, yy, dashW, h);
   }
 
+  // Edge stripes
+  function edgeXLeft(y){
+    const t = (y - topY)/(bottomY-topY);
+    return centerX - (topW/2 + t*(bottomW-topW)/2);
+  }
+  function edgeXRight(y){
+    const t = (y - topY)/(bottomY-topY);
+    return centerX + (topW/2 + t*(bottomW-topW)/2);
+  }
+  ctx.fillStyle = '#ff2b2b';
+  for(let y=topY; y<bottomY; y+=40){
+    const yy = y + (roadOffset*0.7);
+    const lx = edgeXLeft(yy)-8;
+    const rx = edgeXRight(yy);
+    ctx.fillRect(lx, yy, 8, 20);
+    ctx.fillRect(rx, yy, 8, 20);
+  }
+}
+
+// --- draw car sprite ---
+drawSprite(SPRITES.car, car.x, car.y, car.scale);
+
+  // draw coolant bottle sprite
+ drawSprite(SPRITES.bottle, coolant.x, coolant.y, coolant.scale);
+
+  coolant.y += 6;
+
+  // collision (AABB)
+if(
+  coolant.x < car.x + car.w &&
+  coolant.x + coolant.w > car.x &&
+  coolant.y < car.y + car.h &&
+  coolant.y + coolant.h > car.y
+){
+  score++;
+  coolant.y = -coolant.h;
+  coolant.x = Math.random()*(canvas.width- coolant.w);
+}
+
   // miss
-  if(coolant.y > 640){
+if(coolant.y > canvas.height + 40){
     running = false;
     overlay.innerHTML = `🔥 FIN DEL JUEGO 🔥<br/>Puntos: ${score}<br/><br/>Radiadores Zambrano · Zambrano Cool Run<br/><button onclick="startGame()">Reintentar</button>`;
     overlay.style.display='block';
     return;
   }
 
-  ctx.fillStyle='#000';
-  ctx.fillText('Refrigerante: '+score, 10, 20);
+  ctx.fillStyle = '#111';
+ctx.font = '16px Arial';
+ctx.fillText('Refrigerante: ' + score, 10, 22);
+ctx.fillText('Zambrano Cool Run', 10, 42);
 
   requestAnimationFrame(loop);
 }
